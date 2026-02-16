@@ -1,12 +1,20 @@
 import axios from 'axios'
 
-const API_BASE_URL = '/api'
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
+})
+
+// Reject responses that return HTML instead of JSON (e.g. SPA fallback)
+api.interceptors.response.use((response) => {
+  if (typeof response.data === 'string' && response.data.includes('<!DOCTYPE')) {
+    return Promise.reject(new Error('API returned HTML instead of JSON — backend may be unreachable'))
+  }
+  return response
 })
 
 // Contacts API

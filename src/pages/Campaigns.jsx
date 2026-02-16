@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Plus, Send, Users, TrendingUp, Trash2, Eye, Play, X, Paperclip, AlertTriangle } from 'lucide-react'
+import { Plus, Send, Users, TrendingUp, Trash2, Eye, Play, X, Paperclip, AlertTriangle, MessageSquare } from 'lucide-react'
 import {
   getCampaigns,
   createCampaign,
@@ -102,7 +102,14 @@ function Campaigns() {
     pollingRef.current[campaignId] = setInterval(poll, 5000)
   }, [])
 
+  const isLinkedIn = formData.campaign_type === 'linkedin'
+
   const filteredTemplates = templates.filter((t) => {
+    // Filter by campaign type
+    const tplType = (t.template_type || 'email').toLowerCase()
+    if (isLinkedIn && tplType !== 'linkedin') return false
+    if (!isLinkedIn && tplType === 'linkedin') return false
+
     if (!formData.target_contact_type) return true
     const name = (t.name || '').toLowerCase()
     const ct = formData.target_contact_type
@@ -141,7 +148,7 @@ function Campaigns() {
         campaign_type: formData.campaign_type,
         template_id: formData.template_id,
         target_contact_type: formData.target_contact_type,
-        attachment_path: formData.attach_pdf ? '/app/data/TransferX_College_Deck.pdf' : null,
+        attachment_path: (!isLinkedIn && formData.attach_pdf) ? '/app/data/TransferX_College_Deck.pdf' : null,
       }
       await createCampaign(payload)
       setShowCreateModal(false)
@@ -346,7 +353,18 @@ function Campaigns() {
               campaigns.map((campaign) => (
                 <tr key={campaign.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4">
-                    <div className="font-medium text-gray-900">{campaign.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium text-gray-900">{campaign.name}</span>
+                      {campaign.campaign_type === 'linkedin' ? (
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-blue-100 text-blue-700">
+                          LinkedIn
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-gray-100 text-gray-600">
+                          Email
+                        </span>
+                      )}
+                    </div>
                     {campaign.attachment_path && (
                       <div className="flex items-center gap-1 text-xs text-gray-400 mt-1">
                         <Paperclip size={12} />
@@ -440,8 +458,40 @@ function Campaigns() {
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="e.g., Club Outreach Wave 1"
+                  placeholder={isLinkedIn ? 'e.g., LinkedIn Student Outreach' : 'e.g., Club Outreach Wave 1'}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Channel
+                </label>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, campaign_type: 'email', template_id: null, attach_pdf: true })}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-colors ${
+                      !isLinkedIn
+                        ? 'border-primary-500 bg-primary-50 text-primary-700'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    <Send size={18} />
+                    Email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, campaign_type: 'linkedin', template_id: null, attach_pdf: false })}
+                    className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-colors ${
+                      isLinkedIn
+                        ? 'border-blue-500 bg-blue-50 text-blue-700'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                    }`}
+                  >
+                    <MessageSquare size={18} />
+                    LinkedIn DM
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -452,7 +502,20 @@ function Campaigns() {
                   required
                   value={formData.target_contact_type}
                   onChange={(e) =>
-                    setFormData({ ...formData, target_contact_type: e.target.value, template_id: null })
+                    {
+                      const ct = e.target.value
+                      let match = null
+                      if (formData.campaign_type === 'linkedin') {
+                        // For LinkedIn, pick the first linkedin template
+                        match = templates.find((t) => (t.template_type || '').toLowerCase() === 'linkedin')
+                      } else {
+                        match = templates.find((t) => {
+                          const n = (t.name || '').toLowerCase()
+                          return (n.includes(ct) || n.includes(ct.replace('_', ' '))) && n.includes('initial')
+                        })
+                      }
+                      setFormData({ ...formData, target_contact_type: ct, template_id: match ? match.id : null })
+                    }
                   }
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                 >
@@ -465,14 +528,14 @@ function Campaigns() {
                 </select>
               </div>
 
-              {formData.target_contact_type && (
+              {(formData.target_contact_type || isLinkedIn) && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Template
+                    {isLinkedIn ? 'Message Template' : 'Email Template'}
                   </label>
                   {filteredTemplates.length === 0 ? (
                     <p className="text-sm text-gray-500">
-                      No templates found for this category.{' '}
+                      No {isLinkedIn ? 'LinkedIn' : 'email'} templates found.{' '}
                       <button
                         type="button"
                         onClick={handleImportTemplates}
@@ -486,14 +549,14 @@ function Campaigns() {
                       required
                       value={formData.template_id || ''}
                       onChange={(e) =>
-                        setFormData({ ...formData, template_id: parseInt(e.target.value) || null })
+                        setFormData({ ...formData, template_id: e.target.value || null })
                       }
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     >
                       <option value="">Select a template...</option>
                       {filteredTemplates.map((t) => (
                         <option key={t.id} value={t.id}>
-                          {t.name} — {t.subject}
+                          {t.name}{t.subject ? ` — ${t.subject}` : ''}
                         </option>
                       ))}
                     </select>
@@ -501,21 +564,23 @@ function Campaigns() {
                 </div>
               )}
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="attach_pdf"
-                  checked={formData.attach_pdf}
-                  onChange={(e) => setFormData({ ...formData, attach_pdf: e.target.checked })}
-                  className="h-4 w-4 text-primary-600 rounded"
-                />
-                <label htmlFor="attach_pdf" className="text-sm text-gray-700 flex items-center gap-1">
-                  <Paperclip size={14} />
-                  Attach TransferX College Deck (PDF)
-                </label>
-              </div>
+              {!isLinkedIn && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="attach_pdf"
+                    checked={formData.attach_pdf}
+                    onChange={(e) => setFormData({ ...formData, attach_pdf: e.target.checked })}
+                    className="h-4 w-4 text-primary-600 rounded"
+                  />
+                  <label htmlFor="attach_pdf" className="text-sm text-gray-700 flex items-center gap-1">
+                    <Paperclip size={14} />
+                    Attach TransferX College Deck (PDF)
+                  </label>
+                </div>
+              )}
 
-              {formData.template_id && (
+              {formData.template_id && !isLinkedIn && (
                 <button
                   type="button"
                   onClick={handlePreview}
@@ -527,8 +592,24 @@ function Campaigns() {
                 </button>
               )}
 
-              {/* Preview Panel */}
-              {showPreview && (
+              {/* LinkedIn message preview */}
+              {formData.template_id && isLinkedIn && (
+                <div className="border border-blue-200 rounded-lg overflow-hidden">
+                  <div className="bg-blue-50 px-4 py-2">
+                    <div className="text-sm font-medium text-blue-700">
+                      LinkedIn DM Preview
+                    </div>
+                  </div>
+                  <div className="bg-white p-4">
+                    <p className="text-sm text-gray-600 whitespace-pre-wrap">
+                      {(templates.find(t => t.id === formData.template_id)?.body_text || '').replace(/\{\{name\}\}/g, 'John').replace(/\{\{college\}\}/g, 'UCLA')}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Email Preview Panel */}
+              {showPreview && !isLinkedIn && (
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="bg-gray-50 px-4 py-2 flex justify-between items-center">
                     <div className="text-sm font-medium text-gray-700">
@@ -592,7 +673,7 @@ function Campaigns() {
             </div>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{showDeleteModal.name}</strong>? This will
-              remove all queued emails and cannot be undone.
+              remove all queued messages and cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
